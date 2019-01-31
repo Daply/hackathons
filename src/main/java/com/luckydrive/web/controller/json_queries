@@ -1,0 +1,94 @@
+/create/trip
+/update/trip
+/delete/trip
+         {
+         "startPoint": {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "work",
+         "radius": 0
+         },
+         "endPoint": {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "home",
+         "radius": 0
+         },
+         "departureTimeLowerBound": "14:30:00",
+         "departureTimeUpperBound": "15:30:00",
+         "dateOfDeparture": "2019-02-02",
+         "limitNumberOfPassengers": 3,
+         "comments": "",
+         "intermediatePoints": {
+         {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "work",
+         "radius": 0
+         },
+         {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "work",
+         "radius": 0
+         }
+         },
+         "tags": {
+         {
+         "tagName": "Uruchye",
+         "tagPoint": {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "Uruchye",
+         "radius": 0
+         }
+         },
+         {
+         "tagName": "Octyabrskaya",
+         "tagPoint": {
+         "lat": 27.6954545,
+         "lng": "53.9246919",
+         "address": "Octyabrskaya",
+         "radius": 0
+         }
+         }
+         }
+         }
+         
+ /create/carinfo       
+ /update/carinfo
+ /delete/carinfo
+          {
+          "carMark": "Bentley",
+          "carNumber": "1111-AK7",
+          "carColor": "green",
+          "carRules": {
+          "smokingAllowed": false,
+          "foodAllowed": true,
+          "comments": "im major",
+          "user_id": 2
+          }
+          }
+ /save/favroute
+ 		 {
+		 "departmentPoint": {
+		 "lat": 27.6954545,
+		 "lng": "53.9246919",
+		 "address": "work",
+		 "radius": 0
+		 },
+		 "destinationPoint": {
+		 "lat": 27.6954545,
+		 "lng": "53.9246919",
+		 "address": "work",
+		 "radius": 0
+		 }
+		 }
+do we really need this query below?
+/save/point/route
+		 {
+		 "lat": 27.6954545,
+		 "lng": "53.9246919",
+		 "address": "work",
+		 "radius": 0 (not necessary)
+		 }

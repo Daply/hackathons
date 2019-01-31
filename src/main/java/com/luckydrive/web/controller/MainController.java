@@ -1,15 +1,19 @@
 package com.luckydrive.web.controller;
 
+import java.security.Principal;
 import java.sql.Time;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.apache.logging.log4j.Logger;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -17,28 +21,43 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.luckydrive.config.security.IAuthenticationFacade;
+import com.luckydrive.config.security.LuckyDriveUserPrincipal;
+import com.luckydrive.model.AdditionPassengerToTrip;
 import com.luckydrive.model.CarInfo;
+import com.luckydrive.model.CarRules;
 import com.luckydrive.model.FavouriteRoute;
+import com.luckydrive.model.Notification;
 import com.luckydrive.model.Point;
+import com.luckydrive.model.RemovingPassengerFromTrip;
 import com.luckydrive.model.Tag;
 import com.luckydrive.model.Trip;
 import com.luckydrive.model.TripStatus;
 import com.luckydrive.model.User;
+import com.luckydrive.model.UserMode;
 import com.luckydrive.repository.CarInfoRepository;
 import com.luckydrive.repository.CarRulesRepository;
 import com.luckydrive.repository.FavouriteRouteRepository;
+import com.luckydrive.repository.HomeAddressRepository;
+import com.luckydrive.repository.NotificationRepository;
 import com.luckydrive.repository.PointRepository;
 import com.luckydrive.repository.TagRepository;
 import com.luckydrive.repository.TripRepository;
 import com.luckydrive.repository.UserRepository;
 
-
 @RestController
-//@RequestMapping("/you")
 public class MainController {
 
 	@Autowired
+	private SimpMessagingTemplate messagingTemplate;
+	
+	@Autowired
+	private IAuthenticationFacade authenticationFacade;
+
+	@Autowired
 	UserRepository userRepository;
+	@Autowired
+	HomeAddressRepository homeAddressRepository;
 	@Autowired
 	CarInfoRepository carInfoRepository;
 	@Autowired
@@ -50,8 +69,10 @@ public class MainController {
 	@Autowired
 	TripRepository tripRepository;
 	@Autowired
+	NotificationRepository notificationRepository;
+	@Autowired
 	TagRepository tagRepository;
-	
+
 	@RequestMapping(value = "/info", method = RequestMethod.GET)
 	public String isItWorking(@RequestParam("name") final String name) {
 		return "Run away from IBA, " + name;
@@ -60,531 +81,651 @@ public class MainController {
 	@RequestMapping(value = "/allusers", method = RequestMethod.GET)
 	public @ResponseBody Iterable<User> getAllUsers() {
 		// This returns a JSON or XML with the users
-	    // just for test
+		// just for test
 		return userRepository.findAll();
-    }
+	}
 	
-	/* Search trips methods:
-	 * - get driver's trips
-	 * - search by two points, start and end
-	 * - search by existing tags*/
-    
+	@RequestMapping(value = "/user", 
+	        method = RequestMethod.GET,
+	        produces = "application/json")
+	public @ResponseBody User getAuthenticatedUser() {
+	    // This returns a JSON or XML with the users
+	    // just for test
+	    Authentication authentication = authenticationFacade.getAuthentication();
+	    LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+	    User userParsed = userPrinc.getAppUser();
+	    Optional<User> user = userRepository.findById(userParsed.getUserId());
+	    return user.get();
+	}
+
 	/**
-	 * Return all trips created by driver
-	 * FOR DRIVER
-	 * @param userId
+	 * User reads notification -> notification must be deleted
+	 */
+	@RequestMapping(value = "/read/notification", method = RequestMethod.GET)
+	public void userReadNotification() {
+	    // This returns a JSON or XML with the users
+	    // just for test
+	    Authentication authentication = authenticationFacade.getAuthentication();
+	    LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+	    User userParsed = userPrinc.getAppUser();
+	    Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+	    User user = userOpt.get();
+        Notification notification = notificationRepository.findUsersNotification(user.getUserId());
+        notificationRepository.delete(notification);
+	}
+	
+	/**
+     * Update user info:
+     * - home addresses
+     * - phone number
+     * - avatar picture
+     * 
+     * @param userId
+     * @param tripId
+     */
+    @RequestMapping(value = "/update/info", params = {
+            "user" }, method = RequestMethod.POST, consumes = "application/json")
+    public void updateUserInfo(@RequestBody User user) {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User currentUser = userOpt.get();
+        currentUser.setPhone(user.getPhone());
+        currentUser.setHomeAddresses(user.getHomeAddresses());
+        currentUser.setFavouriteRoutes(user.getFavouriteRoutes());
+        userRepository.save(currentUser);
+    }
+
+    /**
+     * Create new trip
+     * FOR DRIVER
+     * @param userId
+     * @param trip
+     */
+    @RequestMapping(value = "/create/trip",
+            method = RequestMethod.POST, 
+            consumes = "application/json")
+    public String createTrip(@RequestBody Trip trip) {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+        CarInfo carInfo = carInfoRepository.findDriversCarInfo(user.getUserId());
+        if (user.getUserMode().equals(UserMode.DRIVER) &&
+                carInfo != null) {
+            trip.setStatus(TripStatus.ACTIVE);
+            pointRepository.save(trip.getStartPoint());
+            pointRepository.save(trip.getEndPoint());
+            pointRepository.saveAll(trip.getIntermediatePoints());
+            tagRepository.saveAll(trip.getTags());
+            tripRepository.save(trip);
+            Notification notification = new Notification();
+            notification.setMessage("You are driver of trip: \n" +
+            "from " + trip.getStartPoint().getAddress() + " \n" +
+            "to " + trip.getEndPoint() +
+            "Trip starts in 15 minutes ");
+            notification.setMessageDate(trip.getDateOfDeparture()); //TODO set date as date of trip -15 minutes
+            notification.setUser(trip.getDriver());
+            notification.setTrip(trip);
+            notification.setRead(false);
+            notificationRepository.save(notification);
+            return "OK";
+        }
+        else {
+            return "ERROR";
+        }
+    }
+    
+    /**
+     * Update trip (submit changes)
+     * FOR DRIVER
+     * @param userId
+     * @param trip
+     */
+    @RequestMapping(value = "/update/trip",
+            method = RequestMethod.POST, 
+            consumes = "application/json")
+    public void updateTrip(@RequestBody Trip trip) {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+        if (user.getUserMode().equals(UserMode.DRIVER) &&
+                trip.getDriver().equals(user)) {
+            pointRepository.save(trip.getStartPoint());
+            pointRepository.save(trip.getEndPoint());
+            pointRepository.saveAll(trip.getIntermediatePoints());
+            tagRepository.saveAll(trip.getTags());
+            tripRepository.save(trip);
+            
+            // change all passengers notifications
+            List<Notification> notifications = new ArrayList<Notification>();
+            for(Notification not: notificationRepository.findAllUsersNotificationsInOneTrip(trip.getTripId())) {
+                not.setMessage("You are driver of trip: \n" +
+                        "from " + trip.getStartPoint().getAddress() + " \n" +
+                        "to " + trip.getEndPoint() +
+                        "Trip starts in 15 minutes ");
+                not.setMessageDate(trip.getDateOfDeparture()); //TODO set date as date of trip -15 minutes
+                notifications.add(not);
+            }
+            notificationRepository.saveAll(notifications);
+        }
+    }
+    
+     /**
+      * Delete trip
+      * FOR DRIVER
+      * @param userId
+      * @param trip
+      */
+     @RequestMapping(value = "/delete/trip",
+             method = RequestMethod.POST, 
+             consumes = "application/json")
+     public void deleteTrip(@RequestBody Trip trip) {
+         Authentication authentication = authenticationFacade.getAuthentication();
+         LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+         User userParsed = userPrinc.getAppUser();
+         Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+         User user = userOpt.get();
+         if (user.getUserMode().equals(UserMode.DRIVER) &&
+                 trip.getDriver().equals(user)) {
+             pointRepository.delete(trip.getStartPoint());
+             pointRepository.delete(trip.getEndPoint());
+             pointRepository.deleteAll(trip.getIntermediatePoints());
+             tagRepository.deleteAll(trip.getTags());
+             tripRepository.delete(trip);
+             notificationRepository.deleteAllUsersNotificationsInOneTrip(trip.getTripId());
+         }
+     }
+     
+     /**
+      * Add car information
+      * FOR DRIVER
+      * @param userId
+      * @param carInfo
+      */
+     @RequestMapping(value = "/create/carinfo", 
+             method = RequestMethod.POST, 
+             consumes = "application/json")
+     public void createCarInfo(@RequestBody CarInfo carInfo) {
+         Authentication authentication = authenticationFacade.getAuthentication();
+         LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+         User userParsed = userPrinc.getAppUser();
+         Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+         User user = userOpt.get();
+         if (user.getUserMode().equals(UserMode.DRIVER)) {
+             carRulesRepository.save(carInfo.getCarRules());
+             carInfoRepository.save(carInfo);
+         }
+     }
+     
+     /**
+      * Add car information
+      * FOR DRIVER
+      * @param userId
+      * @param carInfo
+      */
+     @RequestMapping(value = "/update/carinfo", 
+             method = RequestMethod.POST, 
+             consumes = "application/json")
+     public void updateCarInfo(@RequestBody CarInfo carInfo) {
+         Authentication authentication = authenticationFacade.getAuthentication();
+         LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+         User userParsed = userPrinc.getAppUser();
+         Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+         User user = userOpt.get();
+         if (user.getUserMode().equals(UserMode.DRIVER)) {
+             CarInfo usCarInfo = carInfoRepository.findDriversCarInfo(user.getUserId());
+             usCarInfo.setCarColor(carInfo.getCarColor());
+             usCarInfo.setCarMark(carInfo.getCarMark());
+             usCarInfo.setCarNumber(carInfo.getCarNumber());
+             usCarInfo.setCarRules(carInfo.getCarRules());
+             CarRules usCarRules = carRulesRepository.findById(usCarInfo.getCarRules().getCarRulesId()).get();
+             usCarRules.setFoodAllowed(carInfo.getCarRules().isFoodAllowed());
+             usCarRules.setSmokingAllowed(carInfo.getCarRules().isSmokingAllowed());
+             usCarRules.setComments(carInfo.getCarRules().getComments());
+             carRulesRepository.save(usCarRules);
+             carInfoRepository.save(usCarInfo);
+         }
+     }
+     
+     /**
+      * Add car information
+      * FOR DRIVER
+      * @param userId
+      * @param carInfo
+      */
+     @RequestMapping(value = "/delete/carinfo", 
+             method = RequestMethod.GET)
+     public String deleteCarInfo(@RequestParam("carid") final Long carid) {
+         Authentication authentication = authenticationFacade.getAuthentication();
+         LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+         User userParsed = userPrinc.getAppUser();
+         Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+         User user = userOpt.get();
+         if (user.getUserMode().equals(UserMode.DRIVER)) {
+             CarInfo usCarInfo = carInfoRepository.findDriversCarInfo(user.getUserId());
+             if (usCarInfo != null && usCarInfo.getCarInfoId().equals(carid)) {
+                 carRulesRepository.delete(usCarInfo.getCarRules());
+                 carInfoRepository.delete(usCarInfo);
+                 return "OK";
+             }
+         }
+         return "ERROR";
+     }
+	
+
+	/**
+	 * Return all user's active trips
+	 * FOR DRIVER/PASSENGER
+	 * - for driver these trips have status ACTIVE or NOT_ACTIVE
+	 * - for passenger these trips are only ACTIVE
 	 * @return
 	 */
-    @RequestMapping(value="/driver/get/trips", 
-            method=RequestMethod.GET,
-            produces = "application/json")
-    public @ResponseBody String getDriversTrips(@RequestParam("user") Long userId) {
-        List<Trip> trips = null;
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            trips = tripRepository.getDriversTrips(userId);
-        }
-        // create json object manually
-        JSONObject tripsJson = new JSONObject();
-        JSONArray array = new JSONArray();
-        if (trips == null)
-            trips = new LinkedList<Trip>();
-        else {
-            JSONObject json = null;
-            for (Trip trip: trips) {
-                json = new JSONObject();
-                json.put("driverName", trip.getDriver().getName());
-                json.put("driverSurname", trip.getDriver().getSurname());
-                JSONObject startPoint = new JSONObject();
-                startPoint.put("lat", trip.getStartPoint().getLat());
-                startPoint.put("lng", trip.getStartPoint().getLng());
-                startPoint.put("address", trip.getStartPoint().getAddress());
-                startPoint.put("radius", trip.getStartPoint().getRadius());
-                json.put("startPoint", startPoint);
-                JSONObject endPoint = new JSONObject();
-                endPoint.put("lat", trip.getEndPoint().getLat());
-                endPoint.put("lng", trip.getEndPoint().getLng());
-                endPoint.put("address", trip.getEndPoint().getAddress());
-                endPoint.put("radius", trip.getEndPoint().getRadius());
-                json.put("endPoint", endPoint);
-                json.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
-                json.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
-                json.put("dateOfDeparture", trip.getDateOfDeparture());
-                json.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
-                json.put("comments", trip.getComments());
-                array.put(json);
-            }
-            tripsJson.put("trips", array);
-        }
-        return tripsJson.toString();
-    }
+	@RequestMapping(value = "/get/trips", 
+	        method = RequestMethod.GET, 
+	        produces = "application/json")
+	public @ResponseBody String getTrips() {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+	    String response = new String("{\"trips\":[]}");
+	    Iterable<Trip> trips;
+	    if (user.getUserMode().equals(UserMode.DRIVER)) {
+	        trips = tripRepository.getDriversTrips(user.getUserId());
+	        if (trips == null)
+	            response = createJsonStringFromTripsForDriver(trips);
+	    }
+	    else if (user.getUserMode().equals(UserMode.PASSENGER)) {
+	        trips = tripRepository.getPassengersTrips(user.getUserId());
+	        trips = tripRepository.getDriversTrips(user.getUserId());
+	        if (trips == null)
+	            response = createJsonStringFromTripsForPassenger(trips);
+	    }
+		return response;
+	}
 	
 	/**
-	 * Find trips from work location point to home
+     * Return all user's completed trips
+     * FOR DRIVER/PASSENGER
+     *  all trips in which user participated with any mode
+     * @return
+     */
+    @RequestMapping(value = "/get/completed/trips", method = RequestMethod.GET, produces = "application/json")
+    public @ResponseBody String getCompletedTrips() {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+        String response = new String("{\"trips\":[]}");
+        Iterable<Trip> trips;
+        if (user.getUserMode().equals(UserMode.DRIVER)) {
+            trips = tripRepository.getCompletedDriversTrips(user.getUserId());
+            if (trips == null)
+                response = createJsonStringFromTripsForDriver(trips);
+        }
+        else if (user.getUserMode().equals(UserMode.PASSENGER)) {
+            trips = tripRepository.getCompletedPassengersTrips(user.getUserId());
+            if (trips == null)
+                response = createJsonStringFromTripsForPassenger(trips);
+        }
+        return response;
+    }
+
+	/**
+	 * Find trips from work location point to home 
 	 * FOR PASSENGER
+	 * 
 	 * @param address
 	 * @param lat
 	 * @param lng
 	 * @param radius
 	 * @return
 	 */
-    @RequestMapping(value="/find/trips/home", 
-            params = { "address", "lat", "lng", "radius" }, 
-            method=RequestMethod.GET,
-            produces = "application/json")
-    public @ResponseBody String findTripsToHomeByPoint(@RequestParam("address") String address, 
-            @RequestParam("lat") double lat, 
-            @RequestParam("lng") double lng, 
-            @RequestParam("radius") double radius)
-    {
-        // /find/trips/home?address=partizanskaya&lat=53.868758&lng=27.645422&radius=0.03
-    	Iterable<Trip> trips = tripRepository.findTripByClosestEndPoints(lat, lng, radius);
-        if (trips == null)
-            return "{\"trips\":[]}";
-        else {
-            // create json object manually
-            return createJsonStringFromTrips(trips).toString();
-        }
-    }
-    
-    /**
-     * Find trips from home to work location point
-     * FOR PASSENGER
-     * @param address
-     * @param lat
-     * @param lng
-     * @param radius
-     * @return
-     */
-    @RequestMapping(value="/find/trips/work", 
-            params = { "address", "lat", "lng", "radius" }, 
-            method=RequestMethod.GET,
-            produces = "application/json")
-    public @ResponseBody String findTripsToWorkByPoint(@RequestParam("address") String address, 
-            @RequestParam("lat") double lat, 
-            @RequestParam("lng") double lng, 
-            @RequestParam("radius") double radius)
-    {
-        Iterable<Trip> trips = tripRepository.findTripByClosestStartPoints(lat, lng, radius);
-        if (trips == null)
-            return "{\"trips\":[]}";
-        else {
-            // create json object manually
-            return createJsonStringFromTrips(trips).toString();
-        }
-    }
-    
-    /**
-     * Find trips by input text
-     * FOR PASSENGER
-     * @param tags
-     * @return
-     */
-    @RequestMapping(value="/find/trips/tags", 
-            method=RequestMethod.GET,
-            produces = "application/json",
-            consumes = "application/json")
-    public @ResponseBody String findTripsByTags(@RequestBody Set<String> tags) {
-//        [
-//        "Uruchye",
-//        "Borisovsky trakt",
-//        "Partizanskaya"
-//        ]
-    	Iterable<Trip> trips = tripRepository.findTripByTags(tags);
-    	if (trips == null)
-    	    return "{\"trips\":[]}";
-    	else {
-    	    // create json object manually
-    	    return createJsonStringFromTrips(trips).toString();
-    	}
-    }
-    
-    /**
-     * Add passenger to trip
-     * FOR PASSENGER
-     * @param userId
-     * @param tripId
-     */
-    @RequestMapping(value="/add/passenger",
-            params = { "user", "trip" }, 
-            method=RequestMethod.GET)
-    public void addPassengerToTrip(@RequestParam("user") Long userId, 
-            @RequestParam("trip") Long tripId) {
-        // /add/passenger?user=3&trip=2
-        System.out.println();
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            Optional<Trip> trip = tripRepository.findById(tripId);
-            // if user who wants to join the trip is not a driver of
-            // this trip
-            if (trip.isPresent() && !trip.get().getDriver().getUserId().equals(userId)) {
-                Trip updatedTrip = trip.get();
-                updatedTrip.addPassenger(user.get());
-                updatedTrip.incrementPasseger();
-                tripRepository.save(updatedTrip);
-                User updatedUser = user.get();
-                updatedUser.addTrip(updatedTrip);
-                userRepository.save(updatedUser);
-            }
-        }
-    }
-    
-    /**
-     * Delete passenger from trip
-     * FOR DRIVER AND PASSENGER
-     * @param userId
-     * @param tripId
-     */
-    @RequestMapping(value="/delete/passenger",
-            params = { "driver", "user", "trip" }, 
-            method=RequestMethod.GET)
-    public void deletePassengerToTrip(@RequestParam("driver") Long driverId, 
-            @RequestParam("user") Long userId,
-            @RequestParam("trip") Long tripId) {
-        // /delete/passenger?driver=2&user=3&trip=39
-        System.out.println();
-        Optional<User> driver = userRepository.findById(driverId);
-        Optional<User> user = userRepository.findById(userId);
-        if (driver.isPresent() && user.isPresent()) {
-            Optional<Trip> trip = tripRepository.findById(tripId);
-            // if user who wants to join the trip is not a driver of
-            // this trip
-            if (!trip.get().getDriver().getUserId().equals(userId)) {
-                Trip updatedTrip = trip.get();
-                updatedTrip.removePassenger(user.get());
-                updatedTrip.decrementPasseger();
-                tripRepository.save(updatedTrip);
-            }
-        }
-    }
-    /**
-     * Update trip
-     * FOR DRIVER
-     * @param userId
-     * @param tripId
-     * @param trip
-     */
-    @RequestMapping(value="/update/trip",
-            params = { "user", "trip" }, 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void updateTrip(@RequestParam("user") Long userId, 
-            @RequestParam("trip") Long tripId, 
-            @RequestBody Trip trip) {
-        // /add/passenger?user=1&trip=1
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            trip.setTripId(tripId);
-            tripRepository.save(trip);
-        }
-    }
-    
-    /**
-     * Add passenger to trip
-     * FOR PASSENGER
-     * @param userId
-     * @param tripId
-     */
-    @RequestMapping(value="/update/info",
-            params = { "user" }, 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void updateUserInfo(@RequestParam("user") Long userId, 
-            @RequestParam("time") Time usualTime,
-            @RequestBody Set<FavouriteRoute> routes
-            ) {
-        // /add/passenger?user=1&trip=1
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            
-            
-            // update user
-            userRepository.save(user.get());
-            
-            
-        }
-    }
-    
-    /* Save entities methods:
-     * - create trip for driver (also when creating trip, saving it's
-     *   tags and all the points)
-     * - create driver's car info
-     * - save favourite route for passengers 
-     * 
-     * Any user:
-     * - logs in
-     * - choose role: driver or passenger
-     * - modify account info
-     * 
-     * 
-     * Driver:
-     * - creates trip
-     * - deletes trip
-     * - updates trip
-     * - creates car info and  car rules
-     * - updates car info and  car rules
-     * - deletes car info and  car rules
-     * 
-     * 
-     * Passenger:
-     * - adds favourite routes
-     * - sends request with 2 points, tags and time to find trips
-     * 
-     * 
-     * */
-    
-    /** 
-     * Create new point (for test for a while)
-     * @param point
-     */
-    @RequestMapping(value="/save/point", 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void createPoint(@RequestBody Point point) {
-    	// JSON 
-        // {
-    	//	"lat": 27.6954545,
-    	//	"lng": "53.9246919",
-    	//	"address": "work", 
-    	//  "radius": 0 (not necessary)
-    	// }
-    	pointRepository.save(point);
-    }  
-    
-    /**
-     * Create new trip (only if user is a driver)
-     * @param userId
-     * @param trip
-     */
-    @RequestMapping(value="/create/trip", 
-    		params = { "user" }, 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void createTrip(@RequestParam("user") Long userId, 
-            @RequestBody Trip trip) {
-    	// JSON 
-        // {
-    	//  "startPoint": {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "work", 
-    	//        "radius": 0
-        //  },
-    	//  "endPoint": {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "home", 
-    	//        "radius": 0
-        //  },
-    	//  "departureTimeLowerBound": "14:30:00",
-    	//  "departureTimeUpperBound": "15:30:00",
-    	//  "dateOfDeparture": "2019-02-02",
-    	//  "limitNumberOfPassengers": 3,
-    	//  "comments": "",
-    	//  "intermediatePoints": {
-    	//     {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "work", 
-    	//        "radius": 0
-        //     },
-    	//     {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "work", 
-    	//        "radius": 0
-        //     }
-    	//   },
-    	//   "tags": {
-    	//       {
-    	//        "tagName": "Uruchye",
-    	//        "tagPoint": {
-        //               "lat": 27.6954545,
-    	//	             "lng": "53.9246919",
-    	//	             "address": "Uruchye", 
-    	//               "radius": 0
-    	//         }
-    	//       },
-    	//       {
-    	//        "tagName": "Octyabrskaya",
-    	//        "tagPoint": {
-        //               "lat": 27.6954545,
-    	//	             "lng": "53.9246919",
-    	//	             "address": "Octyabrskaya", 
-    	//               "radius": 0
-    	//         }
-    	//       }
-    	//   }
-    	// }
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-        	trip.setStatus(TripStatus.ACTIVE);
-            pointRepository.save(trip.getStartPoint());
-            pointRepository.save(trip.getEndPoint());
-            pointRepository.saveAll(trip.getIntermediatePoints());
-            tagRepository.saveAll(trip.getTags());
-            tripRepository.save(trip);
-        }
-    }
-    
-    /**
-     * Add car information (only if user as a driver)
-     * @param userId
-     * @param carInfo
-     */
-    @RequestMapping(value="/create/carinfo",
-    		params = { "user" }, 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void createCarInfo(@RequestParam("user") Long userId,
-            @RequestBody CarInfo carInfo) {
-    	// JSON 
-        // {
-    	//	"carMark": "Bentley",
-    	//	"carNumber": "1111-AK7",
-    	//	"carColor": "green", 
-    	//  "carRules": {
-        //       "smokingAllowed": false,
-        //       "foodAllowed": true,
-    	//       "comments": "im major"
-        //  }
-    	// }
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            carRulesRepository.save(carInfo.getCarRules());
-            carInfo.setUser(user.get());
-            carInfoRepository.save(carInfo);
-        }
-    }
-    
-    /**
-     * Save favourite route (only if user as a passenger)
-     * if it is needed to save two points
-     * route is added also in editing user info
-     * @param userId
-     * @param route
-     */
-    @RequestMapping(value="/save/favroute", 
-    		params = { "user" }, 
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void saveFavouriteRoute(@RequestParam("user") Long userId, 
-            @RequestBody FavouriteRoute route) {
-    	// JSON 
-        // {
-    	//	"departmentPoint": {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "work", 
-    	//        "radius": 0
-    	//  },
-    	//	"destinationPoint": {
-        //        "lat": 27.6954545,
-    	//	      "lng": "53.9246919",
-    	//	      "address": "work", 
-    	//        "radius": 0
-    	//  }
-    	// }
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-            pointRepository.save(route.getDepartmentPoint());
-            pointRepository.save(route.getDestinationPoint());
-            route.setUser(user.get());
-            favouriteRouteRepository.save(route);
-        }
-    }
-    
-    /**
-     * Save favourite route (only if user as a passenger)
-     * if it is needed to only one destination point
-     * route is added also in editing user info
-     * @param userId
-     * @param destinationPoint
-     */
-    @RequestMapping(value="/save/point/route",
-    		params = { "user" },
-            method=RequestMethod.POST,
-            consumes = "application/json")
-    public void addPointAsFavouriteRoute(@RequestParam("user") Long userId, 
-    		@RequestBody Point destinationPoint) {
-    	// JSON 
-        // {
-    	//	"lat": 27.6954545,
-    	//	"lng": "53.9246919",
-    	//	"address": "work", 
-    	//  "radius": 0 (not necessary)
-    	// }
-        Optional<User> user = userRepository.findById(userId);
-        if (user.isPresent()) {
-        	Point departmentPoint = user.get()
-        			.getOrganization()
-        			.getLocationPoints()
-        			.stream()
-        			.findFirst()
-        			.get();
-            pointRepository.save(destinationPoint);
-            FavouriteRoute route = new FavouriteRoute (user.get(), departmentPoint, destinationPoint);
-            favouriteRouteRepository.save(route);
-        }
-    }
-    
-    
-    public String createJsonStringFromTrips(Iterable<Trip> trips) {
-        // create json object manually
-        JSONObject tripsJson = new JSONObject();
-        JSONArray tripsJsonArray = new JSONArray();
-        JSONObject tripJson = null;
-        for (Trip trip: trips) {
-            tripJson = new JSONObject();
-            tripJson.put("driverName", trip.getDriver().getName());
-            tripJson.put("driverSurname", trip.getDriver().getSurname());
-            JSONObject startPointJson = new JSONObject();
-            startPointJson.put("lat", trip.getStartPoint().getLat());
-            startPointJson.put("lng", trip.getStartPoint().getLng());
-            startPointJson.put("address", trip.getStartPoint().getAddress());
-            startPointJson.put("radius", trip.getStartPoint().getRadius());
-            tripJson.put("startPoint", startPointJson);
-            JSONObject endPointJson = new JSONObject();
-            endPointJson.put("lat", trip.getEndPoint().getLat());
-            endPointJson.put("lng", trip.getEndPoint().getLng());
-            endPointJson.put("address", trip.getEndPoint().getAddress());
-            endPointJson.put("radius", trip.getEndPoint().getRadius());
-            tripJson.put("endPoint", endPointJson);
-            tripJson.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
-            tripJson.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
-            tripJson.put("dateOfDeparture", trip.getDateOfDeparture());
-            tripJson.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
-            tripJson.put("limitNumberOfPassengers", trip.getLimitNumberOfPassengers());
-            JSONArray intermdPointsJsonArray = new JSONArray();
-            JSONObject intermPointJson = null;
-            for(Point intermPoint: trip.getIntermediatePoints()) {
-                intermPointJson = new JSONObject();
-                intermPointJson.put("lat", intermPoint.getLat());
-                intermPointJson.put("lng", intermPoint.getLng());
-                intermPointJson.put("address", intermPoint.getAddress());
-                intermPointJson.put("radius", intermPoint.getRadius());
-                intermdPointsJsonArray.put(intermPointJson);
-            }
-            tripJson.put("intermediatePoints", intermdPointsJsonArray);
-            JSONArray tagJsonArray = new JSONArray();
-            JSONObject tagJson = null;
-            for(Tag tag: trip.getTags()) {
-                tagJson = new JSONObject();
-                tagJson.put("tagName", tag.getTagName());
-                JSONObject tagPointJson = new JSONObject();
-                tagPointJson.put("lat", tag.getTagPoint().getLat());
-                tagPointJson.put("lng", tag.getTagPoint().getLng());
-                tagPointJson.put("address", tag.getTagPoint().getAddress());
-                tagPointJson.put("radius", tag.getTagPoint().getRadius());
-                tagJson.put("tagPoint", tagPointJson);
-                tagJsonArray.put(tagJson);
-            }
-            tripJson.put("tags", tagJsonArray);
-            tripJson.put("comments", trip.getComments());
-            tripsJsonArray.put(tripJson);
-        }
-        tripsJson.put("trips", tripsJsonArray);
-        return tripsJson.toString();
-    }
-    
+	@RequestMapping(value = "/find/trips/home",
+	        method = RequestMethod.GET, 
+	        produces = "application/json")
+	public @ResponseBody String findTripsToHomeByPoint(@RequestBody Point workPoint) {
+		Iterable<Trip> trips = tripRepository
+		        .findTripByClosestEndPoints(workPoint.getLat(), workPoint.getLng(), workPoint.getRadius());
+		if (trips == null)
+			return "{\"trips\":[]}";
+		else {
+			return createJsonStringFromTripsForPassenger(trips).toString();
+		}
+	}
+
+	/**
+	 * Find trips from home to work location point 
+	 * FOR PASSENGER
+	 * 
+	 * @param address
+	 * @param lat
+	 * @param lng
+	 * @param radius
+	 * @return
+	 */
+	@RequestMapping(value = "/find/trips/work",
+	        method = RequestMethod.GET, produces = "application/json")
+	public @ResponseBody String findTripsToWorkByPoint(@RequestBody Point homePoint) {
+		Iterable<Trip> trips = tripRepository
+		        .findTripByClosestStartPoints(homePoint.getLat(), homePoint.getLng(), homePoint.getRadius());
+		if (trips == null)
+			return "{\"trips\":[]}";
+		else {
+			return createJsonStringFromTripsForPassenger(trips).toString();
+		}
+	}
+
+	/**
+	 * Find trips by tags
+	 * FOR PASSENGER
+	 * 
+	 * @param tags
+	 * @return
+	 */
+	@RequestMapping(value = "/find/trips/tags", 
+	        method = RequestMethod.GET, 
+	        produces = "application/json", 
+	        consumes = "application/json")
+	public @ResponseBody String findTripsByTags(@RequestBody Set<String> tags) {
+		Iterable<Trip> trips = tripRepository.findTripByTags(tags);
+		if (trips == null)
+			return "{\"trips\":[]}";
+		else {
+			return createJsonStringFromTripsForPassenger(trips).toString();
+		}
+	}
+
+	/**
+	 * Add passenger to trip 
+	 * FOR PASSENGER
+	 * 
+	 * @param userId
+	 * @param tripId
+	 */
+	@RequestMapping(value = "/add/passenger", 
+	        method = RequestMethod.POST)
+	public void addPassengerToTrip(@RequestBody AdditionPassengerToTrip passengerTrip) {
+		Optional<User> user = userRepository.findById(passengerTrip.getUserId());
+		if (user.isPresent()) {
+			Optional<Trip> trip = tripRepository.findById(passengerTrip.getTripId());
+			// if user who wants to join the trip is not a driver of
+			// this trip
+			if (trip.isPresent() && !trip.get().getDriver().getUserId().equals(passengerTrip.getUserId())) {
+				Trip updatedTrip = trip.get();
+				updatedTrip.addPassenger(user.get());
+				updatedTrip.incrementPasseger();
+				tripRepository.save(updatedTrip);
+				User updatedUser = user.get();
+				updatedUser.addTrip(updatedTrip);
+				userRepository.save(updatedUser);
+	            Notification notification = new Notification();
+	            notification.setMessage("You are passenger of trip: \n" +
+	            "from " + updatedTrip.getStartPoint().getAddress() + " \n" +
+	            "to " + updatedTrip.getEndPoint() +
+	            "Trip starts in 15 minutes ");
+	            notification.setMessageDate(updatedTrip.getDateOfDeparture()); //TODO set date as date of trip -15 minutes
+	            notification.setUser(user.get());
+	            notification.setRead(false);
+	            notificationRepository.save(notification);
+			}
+		}
+	}
+
+	/**
+	 * Delete passenger from trip FOR DRIVER AND PASSENGER
+	 * 
+	 * @param userId
+	 * @param tripId
+	 */
+	@RequestMapping(value = "/delete/passenger",
+	        method = RequestMethod.POST)
+	public void deletePassengerFromTrip(@RequestBody RemovingPassengerFromTrip delPassengerTrip) {
+		Optional<User> driver = userRepository.findById(delPassengerTrip.getDriverId());
+		Optional<User> user = userRepository.findById(delPassengerTrip.getUserId());
+		if (driver.isPresent() && user.isPresent()) {
+			Optional<Trip> trip = tripRepository.findById(delPassengerTrip.getTripId());
+			if (!trip.get().getDriver().getUserId().equals(delPassengerTrip.getUserId())) {
+				Trip updatedTrip = trip.get();
+				updatedTrip.removePassenger(user.get());
+				updatedTrip.decrementPasseger();
+				tripRepository.save(updatedTrip);
+			}
+		}
+	}
+
+	/**
+	 * Save favourite route (only if user as a passenger) if it is needed to save
+	 * two points route is added also in editing user info
+	 * 
+	 * @param userId
+	 * @param route
+	 */
+	@RequestMapping(value = "/save/favroute", params = {
+			"user" }, method = RequestMethod.POST, consumes = "application/json")
+	public void saveFavouriteRoute(@RequestBody FavouriteRoute route) {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+		pointRepository.save(route.getDepartmentPoint());
+		pointRepository.save(route.getDestinationPoint());
+		favouriteRouteRepository.save(route);
+		user.addFavouriteRoutes(route);
+		userRepository.save(user);
+	}
+
+	/**
+	 * Save favourite route (only if user as a passenger) if it is needed to only
+	 * one destination point route is added also in editing user info
+	 * 
+	 * @param userId
+	 * @param destinationPoint
+	 */
+	@RequestMapping(value = "/save/point/route", params = {
+			"user" }, method = RequestMethod.POST, consumes = "application/json")
+	public void addPointAsFavouriteRoute(@RequestParam("user") Long userId, @RequestBody Point destinationPoint) {
+        Authentication authentication = authenticationFacade.getAuthentication();
+        LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
+        User userParsed = userPrinc.getAppUser();
+        Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+        User user = userOpt.get();
+		Point departmentPoint = user.getOrganization().getLocationPoints().stream().findFirst().get();
+		pointRepository.save(destinationPoint);
+		FavouriteRoute route = new FavouriteRoute(user, departmentPoint, destinationPoint);
+		favouriteRouteRepository.save(route);
+	    user.addFavouriteRoutes(route);
+	    userRepository.save(user);
+	}
+
+	public String createJsonStringFromTripsForDriver(Iterable<Trip> trips) {
+		// create json object manually
+		JSONObject tripsJson = new JSONObject();
+		JSONArray tripsJsonArray = new JSONArray();
+		JSONObject tripJson = null;
+		for (Trip trip : trips) {
+			tripJson = new JSONObject();
+			JSONObject startPointJson = new JSONObject();
+			startPointJson.put("lat", trip.getStartPoint().getLat());
+			startPointJson.put("lng", trip.getStartPoint().getLng());
+			startPointJson.put("address", trip.getStartPoint().getAddress());
+			startPointJson.put("radius", trip.getStartPoint().getRadius());
+			tripJson.put("startPoint", startPointJson);
+			JSONObject endPointJson = new JSONObject();
+			endPointJson.put("lat", trip.getEndPoint().getLat());
+			endPointJson.put("lng", trip.getEndPoint().getLng());
+			endPointJson.put("address", trip.getEndPoint().getAddress());
+			endPointJson.put("radius", trip.getEndPoint().getRadius());
+			tripJson.put("endPoint", endPointJson);
+			tripJson.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
+			tripJson.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
+			tripJson.put("dateOfDeparture", trip.getDateOfDeparture());
+			tripJson.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
+			tripJson.put("limitNumberOfPassengers", trip.getLimitNumberOfPassengers());
+			JSONArray intermdPointsJsonArray = new JSONArray();
+			JSONObject intermPointJson = null;
+			for (Point intermPoint : trip.getIntermediatePoints()) {
+				intermPointJson = new JSONObject();
+				intermPointJson.put("lat", intermPoint.getLat());
+				intermPointJson.put("lng", intermPoint.getLng());
+				intermPointJson.put("address", intermPoint.getAddress());
+				intermPointJson.put("radius", intermPoint.getRadius());
+				intermdPointsJsonArray.put(intermPointJson);
+			}
+			tripJson.put("intermediatePoints", intermdPointsJsonArray);
+			JSONArray tagJsonArray = new JSONArray();
+			JSONObject tagJson = null;
+			for (Tag tag : trip.getTags()) {
+				tagJson = new JSONObject();
+				tagJson.put("tagName", tag.getTagName());
+				JSONObject tagPointJson = new JSONObject();
+				tagPointJson.put("lat", tag.getTagPoint().getLat());
+				tagPointJson.put("lng", tag.getTagPoint().getLng());
+				tagPointJson.put("address", tag.getTagPoint().getAddress());
+				tagPointJson.put("radius", tag.getTagPoint().getRadius());
+				tagJson.put("tagPoint", tagPointJson);
+				tagJsonArray.put(tagJson);
+			}
+			tripJson.put("tags", tagJsonArray);
+			tripJson.put("comments", trip.getComments());
+			tripsJsonArray.put(tripJson);
+			JSONArray passengerJsonArray = new JSONArray();
+			JSONObject passengerJson = null;
+	        for (User user : trip.getPassengers()) {
+	            passengerJson = new JSONObject();
+	            passengerJson.put("name", user.getName());
+	            passengerJson.put("surname", user.getSurname());
+	            if (user.getPhone() != null && !user.getPhone().isEmpty())
+	                passengerJson.put("phone", user.getPhone());
+	            passengerJsonArray.put(passengerJson);
+	        }
+	        tripJson.put("passengers", passengerJsonArray);
+		}
+		tripsJson.put("trips", tripsJsonArray);
+		return tripsJson.toString();
+	}
+
+	   public String createJsonStringFromTripsForPassenger(Iterable<Trip> trips) {
+	        // create json object manually
+	        JSONObject tripsJson = new JSONObject();
+	        JSONArray tripsJsonArray = new JSONArray();
+	        JSONObject tripJson = null;
+	        for (Trip trip : trips) {
+	            tripJson = new JSONObject();
+	            tripJson.put("driverName", trip.getDriver().getName());
+	            tripJson.put("driverSurname", trip.getDriver().getSurname());
+	            JSONObject startPointJson = new JSONObject();
+	            startPointJson.put("lat", trip.getStartPoint().getLat());
+	            startPointJson.put("lng", trip.getStartPoint().getLng());
+	            startPointJson.put("address", trip.getStartPoint().getAddress());
+	            startPointJson.put("radius", trip.getStartPoint().getRadius());
+	            tripJson.put("startPoint", startPointJson);
+	            JSONObject endPointJson = new JSONObject();
+	            endPointJson.put("lat", trip.getEndPoint().getLat());
+	            endPointJson.put("lng", trip.getEndPoint().getLng());
+	            endPointJson.put("address", trip.getEndPoint().getAddress());
+	            endPointJson.put("radius", trip.getEndPoint().getRadius());
+	            tripJson.put("endPoint", endPointJson);
+	            tripJson.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
+	            tripJson.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
+	            tripJson.put("dateOfDeparture", trip.getDateOfDeparture());
+	            tripJson.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
+	            tripJson.put("limitNumberOfPassengers", trip.getLimitNumberOfPassengers());
+	            JSONArray intermdPointsJsonArray = new JSONArray();
+	            JSONObject intermPointJson = null;
+	            for (Point intermPoint : trip.getIntermediatePoints()) {
+	                intermPointJson = new JSONObject();
+	                intermPointJson.put("lat", intermPoint.getLat());
+	                intermPointJson.put("lng", intermPoint.getLng());
+	                intermPointJson.put("address", intermPoint.getAddress());
+	                intermPointJson.put("radius", intermPoint.getRadius());
+	                intermdPointsJsonArray.put(intermPointJson);
+	            }
+	            tripJson.put("intermediatePoints", intermdPointsJsonArray);
+	            JSONArray tagJsonArray = new JSONArray();
+	            JSONObject tagJson = null;
+	            for (Tag tag : trip.getTags()) {
+	                tagJson = new JSONObject();
+	                tagJson.put("tagName", tag.getTagName());
+	                JSONObject tagPointJson = new JSONObject();
+	                tagPointJson.put("lat", tag.getTagPoint().getLat());
+	                tagPointJson.put("lng", tag.getTagPoint().getLng());
+	                tagPointJson.put("address", tag.getTagPoint().getAddress());
+	                tagPointJson.put("radius", tag.getTagPoint().getRadius());
+	                tagJson.put("tagPoint", tagPointJson);
+	                tagJsonArray.put(tagJson);
+	            }
+	            tripJson.put("tags", tagJsonArray);
+	            tripJson.put("comments", trip.getComments());
+	            tripsJsonArray.put(tripJson);
+	        }
+	        tripsJson.put("trips", tripsJsonArray);
+	        return tripsJson.toString();
+	    }
+	
+	/*
+	 * @RequestMapping("/") public String index() { return "index.html"; }
+	 */
+
+	/*
+	 * @RequestMapping("/notifications") public String notifications() { return
+	 * "notifications.html"; }
+	 */
+
+	/*
+	 * @RequestMapping(value = "/info", method = RequestMethod.GET) public String
+	 * isItWorking(@RequestParam("name") final String name) { return
+	 * "Run away from IBA, " + name; }
+	 */
+
+	@MessageMapping("/")
+	public void greeting(Principal principal, String message) throws Exception {
+		// Greeting greeting = new Greeting();
+		// greeting.setContent("Hello !");
+		String aaaa = message + " is sent through WebSocket";
+
+		messagingTemplate.convertAndSend(aaaa);
+	}
+
+	/*
+	 * @MessageMapping("/chat.sendMessage")
+	 * 
+	 * @SendTo("/topic/public") public ChatMessage sendMessage(@Payload ChatMessage
+	 * chatMessage) { return chatMessage; }
+	 * 
+	 * @MessageMapping("/chat.addUser")
+	 * 
+	 * @SendTo("/topic/public") public ChatMessage addUser(@Payload ChatMessage
+	 * chatMessage, SimpMessageHeaderAccessor headerAccessor) { // Add username in
+	 * web socket session headerAccessor.getSessionAttributes().put("username",
+	 * chatMessage.getSender()); return chatMessage; }
+	 */
+
+	/*
+	 * @PostMapping("/")
+	 * 
+	 * @ResponseBody public ResponseEntity<?> getNotification(Principal principal) {
+	 * String username = "Shrek".equals(principal.getName()) ? "GrustnyiSergei" :
+	 * "Shrek";
+	 * 
+	 * messagingTemplate.convertAndSendToUser(username, "space/notification", new
+	 * Notification(username + ", go with me"));
+	 * 
+	 * return ResponseEntity.ok(null); }
+	 */
+
+	/*
+	 * public void addToTrip(Principal principal) { // TODO
+	 * messagingTemplate.convertAndSendToUser(driver,
+	 * "private-channel/notification", new Passenger((User) principal)); }
+	 */
+
 }

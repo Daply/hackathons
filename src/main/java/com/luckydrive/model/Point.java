@@ -12,6 +12,9 @@ import javax.persistence.Id;
 import javax.persistence.JoinTable;
 import javax.persistence.ManyToMany;
 import javax.persistence.ManyToOne;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import javax.persistence.JoinColumn;
 
 @Entity(name="point")
@@ -36,6 +39,7 @@ public class Point {
     @ManyToMany(mappedBy = "intermediatePoints")
     private Set<Trip> trips = new HashSet<>();
     
+    @JsonIgnore
     @ManyToMany(mappedBy = "locationPoints")
     private Set<Organization> organizations = new HashSet<>();
 

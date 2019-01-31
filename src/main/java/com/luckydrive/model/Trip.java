@@ -19,6 +19,10 @@ import javax.persistence.JoinTable;
 import javax.persistence.ManyToMany;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
+import javax.persistence.Temporal;
+import javax.persistence.TemporalType;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity(name="trip")
 public class Trip {
@@ -49,6 +53,7 @@ public class Trip {
     @Column(name = "departure_time_upper_bound", columnDefinition = "time")
     private Time departureTimeUpperBound;
     
+    @Temporal(TemporalType.DATE)
     @Column(name = "date_of_departure", columnDefinition = "date")
     private Date dateOfDeparture;
 

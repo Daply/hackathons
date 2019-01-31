@@ -14,7 +14,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-
+import com.luckydrive.model.Trip;
 import com.luckydrive.model.User;
 
 public interface UserRepository extends CrudRepository<User, Long> {
@@ -25,4 +25,9 @@ public interface UserRepository extends CrudRepository<User, Long> {
     
     Optional<User> findById(Long id);    
 
+    User findByEmail(final String email);
+    
+    @Query(value = "SELECT * FROM trip t WHERE t.driver_id=driver_id", 
+    nativeQuery = true)
+    List<Trip> getUsersNotifications(@Param("driver_id") Long driverId);
 }

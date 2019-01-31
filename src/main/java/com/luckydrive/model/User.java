@@ -18,6 +18,8 @@ import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity(name="user")
 public class User {
     @Id
@@ -31,7 +33,10 @@ public class User {
     
     private String email;
     
+    @JsonIgnore
     private String password;
+    
+    private String phone;
     
     @Enumerated(EnumType.STRING)
     @Column(name = "user_mode")
@@ -51,6 +56,9 @@ public class User {
 
     @OneToMany(mappedBy="user")
     private Set<FavouriteRoute> favouriteRoutes;
+    
+    @OneToMany(mappedBy="user")
+    private Set<HomeAddress> homeAddresses;
     
     public User() {
     	
@@ -132,6 +140,38 @@ public class User {
 	public void setFavouriteRoutes(Set<FavouriteRoute> favouriteRoutes) {
 		this.favouriteRoutes = favouriteRoutes;
 	}
+
+	public void addFavouriteRoutes(FavouriteRoute favouriteRoute) {
+	    this.favouriteRoutes.add(favouriteRoute);
+	}
+	   
+	public void removeFavouriteRoutes(FavouriteRoute favouriteRoute) {
+	    this.favouriteRoutes.remove(favouriteRoute);
+	}
+	
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public UserMode getUserMode() {
+        return userMode;
+    }
+
+    public void setUserMode(UserMode userMode) {
+        this.userMode = userMode;
+    }
+
+    public Set<HomeAddress> getHomeAddresses() {
+        return homeAddresses;
+    }
+
+    public void setHomeAddresses(Set<HomeAddress> homeAddresses) {
+        this.homeAddresses = homeAddresses;
+    }
     
 
 }
