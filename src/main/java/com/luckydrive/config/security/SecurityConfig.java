@@ -13,6 +13,7 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 
 @Configuration
 @EnableGlobalMethodSecurity(prePostEnabled = true)
@@ -43,10 +44,27 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 		        .disable()
 		        .authorizeRequests()
 		        .antMatchers(HttpMethod.GET, "/*.js", "/*.json", "/*.ico", "/*.css")
-				.permitAll().anyRequest().authenticated().and().formLogin() //
-				.failureUrl("/login.html?error=true").and().httpBasic()
+				.permitAll()
+				.anyRequest()
+				.authenticated()
 				.and()
-				.oauth2Login();
+				.formLogin()
+			.loginPage("/login")
+            //.successHandler(successHandler())
+				.permitAll()
+				.failureUrl("/login.html?error=true")
+				.and()
+			.httpBasic()
+				.and()
+            .logout()                                    
+                .permitAll();
+	}
+	
+	@Bean
+	public SavedRequestAwareAuthenticationSuccessHandler successHandler() {
+	    SavedRequestAwareAuthenticationSuccessHandler successHandler = new SavedRequestAwareAuthenticationSuccessHandler();
+	    successHandler.setTargetUrlParameter("/home");
+	    return successHandler;
 	}
 
 	@Bean

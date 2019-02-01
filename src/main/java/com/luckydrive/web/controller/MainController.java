@@ -1,9 +1,8 @@
 package com.luckydrive.web.controller;
 
 import java.security.Principal;
-import java.sql.Time;
 import java.util.ArrayList;
-import java.util.LinkedList;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -11,25 +10,35 @@ import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.luckydrive.config.security.IAuthenticationFacade;
 import com.luckydrive.config.security.LuckyDriveUserPrincipal;
 import com.luckydrive.model.AdditionPassengerToTrip;
 import com.luckydrive.model.CarInfo;
 import com.luckydrive.model.CarRules;
+import com.luckydrive.dto.JoinTripResponse;
+import com.luckydrive.dto.NewPassengerNotification;
+import com.luckydrive.dto.PrivateChatMessageDTO;
+import com.luckydrive.dto.UserShortInfo;
+import com.luckydrive.model.ChatMessage;
 import com.luckydrive.model.FavouriteRoute;
 import com.luckydrive.model.Notification;
 import com.luckydrive.model.Point;
 import com.luckydrive.model.RemovingPassengerFromTrip;
+import com.luckydrive.model.PrivateChatMessage;
 import com.luckydrive.model.Tag;
 import com.luckydrive.model.Trip;
 import com.luckydrive.model.TripStatus;
@@ -37,6 +46,7 @@ import com.luckydrive.model.User;
 import com.luckydrive.model.UserMode;
 import com.luckydrive.repository.CarInfoRepository;
 import com.luckydrive.repository.CarRulesRepository;
+import com.luckydrive.repository.ChatMessageRepository;
 import com.luckydrive.repository.FavouriteRouteRepository;
 import com.luckydrive.repository.HomeAddressRepository;
 import com.luckydrive.repository.NotificationRepository;
@@ -45,7 +55,9 @@ import com.luckydrive.repository.TagRepository;
 import com.luckydrive.repository.TripRepository;
 import com.luckydrive.repository.UserRepository;
 
-@RestController
+import net.bytebuddy.utility.RandomString;
+
+@Controller
 public class MainController {
 
 	@Autowired
@@ -73,6 +85,21 @@ public class MainController {
 	@Autowired
 	TagRepository tagRepository;
 
+	@Autowired
+	ChatMessageRepository chatMessageRepository;
+
+	private RandomString randomStringGenerator = new RandomString(8);
+
+	   @RequestMapping("/")
+	    public String index() {
+	        return "index.html";
+	    }
+	
+	@RequestMapping("/login")
+	public String login() {
+		return "login.html";
+	}
+
 	@RequestMapping(value = "/info", method = RequestMethod.GET)
 	public String isItWorking(@RequestParam("name") final String name) {
 		return "Run away from IBA, " + name;
@@ -85,7 +112,7 @@ public class MainController {
 		return userRepository.findAll();
 	}
 	
-	@RequestMapping(value = "/user", 
+	@RequestMapping(value = "/home", 
 	        method = RequestMethod.GET,
 	        produces = "application/json")
 	public @ResponseBody User getAuthenticatedUser() {
@@ -155,7 +182,7 @@ public class MainController {
         CarInfo carInfo = carInfoRepository.findDriversCarInfo(user.getUserId());
         if (user.getUserMode().equals(UserMode.DRIVER) &&
                 carInfo != null) {
-            trip.setStatus(TripStatus.ACTIVE);
+            trip.setStatus(TripStatus.NOT_ACTIVE);
             pointRepository.save(trip.getStartPoint());
             pointRepository.save(trip.getEndPoint());
             pointRepository.saveAll(trip.getIntermediatePoints());
@@ -451,7 +478,7 @@ public class MainController {
 	 * @param tripId
 	 */
 	@RequestMapping(value = "/add/passenger", 
-	        method = RequestMethod.POST)
+	        method = RequestMethod.POST, consumes = "application/json")
 	public void addPassengerToTrip(@RequestBody AdditionPassengerToTrip passengerTrip) {
 		Optional<User> user = userRepository.findById(passengerTrip.getUserId());
 		if (user.isPresent()) {
@@ -475,7 +502,68 @@ public class MainController {
 	            notification.setUser(user.get());
 	            notification.setRead(false);
 	            notificationRepository.save(notification);
+
+				NewPassengerNotification newPassengerNotification = new NewPassengerNotification(
+						getUserShortInfo(updatedUser));
+
+				String chatChannelUuid = updatedTrip.getChatChannelUuid();
+				if (chatChannelUuid != null) {
+					chatChannelUuid = randomStringGenerator.nextString();
+					newPassengerNotification.setChatChannelUuid(chatChannelUuid);
+					updatedTrip.setChatChannelUuid(chatChannelUuid);
+					tripRepository.save(updatedTrip);
+					messagingTemplate.convertAndSendToUser(updatedTrip.getDriver().getEmail(), "/private",
+							notification);
+				}
+				messagingTemplate.convertAndSendToUser(updatedUser.getEmail(), "/private",
+						new JoinTripResponse(chatChannelUuid, notification));
 			}
+
+		}
+	}
+
+	private UserShortInfo getUserShortInfo(User user) {
+		return new UserShortInfo(user.getEmail(), user.getName(), user.getSurname());
+	}
+
+	@MessageMapping("/{tripId}/tripChat/{channelUuid}")
+	@SendTo("/trip/chat/reply/{channelUuid}")
+	public ChatMessage broadcastToAllChatParticipants(@DestinationVariable("channelUuid") String channelUuid,
+			@DestinationVariable("tripId") Long tripId, @Payload ChatMessage message, Principal sender) {
+		submitTripChatMessage(message, sender.getName(), tripId);
+		return message;
+	}
+
+	private void submitTripChatMessage(ChatMessage message, String senderUsername, Long tripId) {
+		Optional<Trip> trip = tripRepository.findById(tripId);
+		if (trip.isPresent()) {
+			Trip updatedTrip = trip.get();
+			updatedTrip.addMessage(message);
+			User sender = userRepository.findByEmail(senderUsername);
+			if (sender != null) {
+				message.setTimeSent(LocalTime.now());
+				message.setSender(sender);
+				tripRepository.save(updatedTrip);
+				chatMessageRepository.save(message);
+			}
+		}
+	}
+
+	@MessageMapping("/chatOf2")
+	public void sendPrivateChatMessage(@Payload PrivateChatMessageDTO message, Principal sender) {
+		Optional<User> recipient = userRepository.findById(message.getRecipientId());
+		if (recipient.isPresent()) {
+			submitPrivateMessage(message, sender.getName(), recipient.get());
+			messagingTemplate.convertAndSendToUser(sender.getName(), "/chat/reply", message);
+		}
+	}
+
+	private void submitPrivateMessage(PrivateChatMessageDTO messageDTO, String senderUsername, User recipient) {
+		User sender = userRepository.findByEmail(senderUsername);
+		if (sender != null) {
+			PrivateChatMessage message = new PrivateChatMessage(sender, messageDTO.getContent(), recipient,
+					LocalTime.now());
+			chatMessageRepository.save(message);
 		}
 	}
 
@@ -670,62 +758,17 @@ public class MainController {
 	        tripsJson.put("trips", tripsJsonArray);
 	        return tripsJson.toString();
 	    }
-	
-	/*
-	 * @RequestMapping("/") public String index() { return "index.html"; }
-	 */
 
-	/*
-	 * @RequestMapping("/notifications") public String notifications() { return
-	 * "notifications.html"; }
-	 */
-
-	/*
-	 * @RequestMapping(value = "/info", method = RequestMethod.GET) public String
-	 * isItWorking(@RequestParam("name") final String name) { return
-	 * "Run away from IBA, " + name; }
-	 */
-
-	@MessageMapping("/")
-	public void greeting(Principal principal, String message) throws Exception {
-		// Greeting greeting = new Greeting();
-		// greeting.setContent("Hello !");
-		String aaaa = message + " is sent through WebSocket";
-
-		messagingTemplate.convertAndSend(aaaa);
+	@MessageMapping("/chat.addUser")
+	@SendTo("/topic/public")
+	public String addUser(String chatMessage, SimpMessageHeaderAccessor headerAccessor) {
+		// Add username in web socket session
+		// headerAccessor.getSessionAttributes().put("username",
+		// chatMessage.getSender());
+		System.out.println(chatMessage);
+		String message = "text: " + chatMessage;
+		return message;
 	}
 
-	/*
-	 * @MessageMapping("/chat.sendMessage")
-	 * 
-	 * @SendTo("/topic/public") public ChatMessage sendMessage(@Payload ChatMessage
-	 * chatMessage) { return chatMessage; }
-	 * 
-	 * @MessageMapping("/chat.addUser")
-	 * 
-	 * @SendTo("/topic/public") public ChatMessage addUser(@Payload ChatMessage
-	 * chatMessage, SimpMessageHeaderAccessor headerAccessor) { // Add username in
-	 * web socket session headerAccessor.getSessionAttributes().put("username",
-	 * chatMessage.getSender()); return chatMessage; }
-	 */
-
-	/*
-	 * @PostMapping("/")
-	 * 
-	 * @ResponseBody public ResponseEntity<?> getNotification(Principal principal) {
-	 * String username = "Shrek".equals(principal.getName()) ? "GrustnyiSergei" :
-	 * "Shrek";
-	 * 
-	 * messagingTemplate.convertAndSendToUser(username, "space/notification", new
-	 * Notification(username + ", go with me"));
-	 * 
-	 * return ResponseEntity.ok(null); }
-	 */
-
-	/*
-	 * public void addToTrip(Principal principal) { // TODO
-	 * messagingTemplate.convertAndSendToUser(driver,
-	 * "private-channel/notification", new Passenger((User) principal)); }
-	 */
 
 }

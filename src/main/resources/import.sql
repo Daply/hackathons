@@ -106,18 +106,12 @@ insert into luckydrive.tag(tag_name, tag_point_id) values ('Mihalovo', 28);
 insert into luckydrive.tag(tag_name, tag_point_id) values ('Petrovshchina', 29);
 insert into luckydrive.tag(tag_name, tag_point_id) values ('Malinovka', 30);
 
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 1, 1, 37, '2019-02-02', '18:30:00', '19:30:00', 5);
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 2, 1, 39, '2019-02-02', '17:00:00', '17:30:00', 5);
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 5, 1, 45, '2019-02-02', '16:00:00', '16:05:00', 5);
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 7, 1, 42, '2019-02-02', '18:00:00', '18:15:00', 5);
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 9, 1, 43, '2019-02-02', '19:55:00', '20:00:00', 5);
-insert into luckydrive.trip(status, driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers) 
-values ('ACTIVE', 12, 1, 44, '2019-02-02', '21:00:00', '21:05:00', 5);
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (1, 1, 37, '2019-02-02', '18:30:00', '19:30:00', 5, 'ACTIVE');
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (2, 1, 39, '2019-02-02', '17:00:00', '17:30:00', 5, 'ACTIVE');
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (5, 1, 45, '2019-02-02', '16:00:00', '16:05:00', 5, 'ACTIVE');
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (7, 1, 42, '2019-02-02', '18:00:00', '18:15:00', 5, 'ACTIVE');
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (9, 1, 43, '2019-02-02', '19:55:00', '20:00:00', 5, 'ACTIVE');
+insert into luckydrive.trip(driver_id, start_point_id, end_point_id, date_of_departure, departure_time_lower_bound, departure_time_upper_bound, limit_number_of_passengers, status) values (12, 1, 44, '2019-02-02', '21:00:00', '21:05:00', 5, 'ACTIVE');
 
 insert into luckydrive.trip_tag_connect(trip_id, tag_id) values (1, 19);
 insert into luckydrive.trip_tag_connect(trip_id, tag_id) values (1, 20);

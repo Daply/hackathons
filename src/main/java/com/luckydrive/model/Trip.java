@@ -1,9 +1,9 @@
 package com.luckydrive.model;
 
 import java.sql.Time;
-import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import javax.persistence.CascadeType;
@@ -19,217 +19,234 @@ import javax.persistence.JoinTable;
 import javax.persistence.ManyToMany;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-
-@Entity(name="trip")
+@Entity(name = "trip")
 public class Trip {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "trip_id")
-    private Long tripId;
-    
-    @OneToOne(cascade = CascadeType.ALL)
-    @JoinColumn(name = "driver_id")
-    private User driver;
-    
-    @Enumerated(EnumType.STRING)
-    private TripStatus status;
-    
-    @OneToOne
-    @JoinColumn(name="start_point_id", nullable=false)
-    private Point startPoint;
-    
-    @OneToOne
-    @JoinColumn(name="end_point_id", nullable=false)
-    private Point endPoint;
-    
-    @Column(name = "departure_time_lower_bound", columnDefinition = "time")
-    private Time departureTimeLowerBound;
-    
-    @Column(name = "departure_time_upper_bound", columnDefinition = "time")
-    private Time departureTimeUpperBound;
-    
-    @Temporal(TemporalType.DATE)
-    @Column(name = "date_of_departure", columnDefinition = "date")
-    private Date dateOfDeparture;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	@Column(name = "trip_id")
+	private Long tripId;
 
-    @Column(name = "limit_number_of_passengers", columnDefinition = "int default 0")
-    private int limitNumberOfPassengers = 0;
-    
-    @Column(name = "current_number_of_passengers", columnDefinition = "int default 0")
-    private int currentNumberOfPassengers = 0;
-    
-    private String comments;
-    
-    @ManyToMany(cascade = { CascadeType.ALL })
-    @JoinTable(
-        name = "trip_intermed_points_connect", 
-        joinColumns = { @JoinColumn(name = "trip_id") }, 
-        inverseJoinColumns = { @JoinColumn(name = "point_id") }
-    )
-    private Set<Point> intermediatePoints = new HashSet<>();
-    
-    @ManyToMany(cascade = { CascadeType.ALL })
-    @JoinTable(
-        name = "trip_tag_connect", 
-        joinColumns = { @JoinColumn(name = "trip_id") }, 
-        inverseJoinColumns = { @JoinColumn(name = "tag_id") }
-    )
-    private Set<Tag> tags = new HashSet<>();
-    
-    @ManyToMany(mappedBy = "trips")
-    private Set<User> passengers = new HashSet<>();
+	@OneToOne(cascade = CascadeType.ALL)
+	@JoinColumn(name = "driver_id")
+	private User driver;
 
-    public Trip() {
-        
-    }
+	@Enumerated(EnumType.STRING)
+	private TripStatus status;
 
-    public Trip(User driver, Point startPoint, Point endPoint, Time departureTimeLowerBound,
-            Time departureTimeUpperBound, Date dateOfDeparture, int limitNumberOfPassengers,
-            String comments, Set<Point> intermediatePoints, Set<Tag> tags) {
-        super();
-        this.driver = driver;
-        this.status = TripStatus.ACTIVE;
-        this.startPoint = startPoint;
-        this.endPoint = endPoint;
-        this.departureTimeLowerBound = departureTimeLowerBound;
-        this.departureTimeUpperBound = departureTimeUpperBound;
-        this.dateOfDeparture = dateOfDeparture;
-        this.limitNumberOfPassengers = limitNumberOfPassengers;
-        this.comments = comments;
-        this.intermediatePoints = intermediatePoints;
-        this.tags = tags;
-    }
+	@OneToOne
+	@JoinColumn(name = "start_point_id", nullable = false)
+	private Point startPoint;
 
-    public TripStatus getStatus() {
-        return status;
-    }
+	@OneToOne
+	@JoinColumn(name = "end_point_id", nullable = false)
+	private Point endPoint;
 
-    public void setStatus(TripStatus status) {
-        this.status = status;
-    }
+	@Column(name = "departure_time_lower_bound", columnDefinition = "time")
+	private Time departureTimeLowerBound;
 
-    public Date getDateOfDeparture() {
-        return dateOfDeparture;
-    }
+	@Column(name = "departure_time_upper_bound", columnDefinition = "time")
+	private Time departureTimeUpperBound;
 
-    public void setDateOfDeparture(Date dateOfDeparture) {
-        this.dateOfDeparture = dateOfDeparture;
-    }
+	@Column(name = "date_of_departure", columnDefinition = "date")
+	private Date dateOfDeparture;
 
-    public Long getTripId() {
-        return tripId;
-    }
+	@Column(name = "limit_number_of_passengers", columnDefinition = "int default 0")
+	private int limitNumberOfPassengers = 0;
 
-    public void setTripId(Long tripId) {
-        this.tripId = tripId;
-    }
+	@Column(name = "current_number_of_passengers", columnDefinition = "int default 0")
+	private int currentNumberOfPassengers = 0;
 
-    public User getDriver() {
-        return driver;
-    }
+	private String comments;
 
-    public void setDriver(User driver) {
-        this.driver = driver;
-    }
+	@ManyToMany(cascade = { CascadeType.ALL })
+	@JoinTable(name = "trip_intermed_points_connect", joinColumns = {
+			@JoinColumn(name = "trip_id") }, inverseJoinColumns = { @JoinColumn(name = "point_id") })
+	private Set<Point> intermediatePoints = new HashSet<>();
 
-    public Point getStartPoint() {
-        return startPoint;
-    }
+	@ManyToMany(cascade = { CascadeType.ALL })
+	@JoinTable(name = "trip_tag_connect", joinColumns = { @JoinColumn(name = "trip_id") }, inverseJoinColumns = {
+			@JoinColumn(name = "tag_id") })
+	private Set<Tag> tags = new HashSet<>();
 
-    public void setStartPoint(Point startPoint) {
-        this.startPoint = startPoint;
-    }
+	@ManyToMany(mappedBy = "trips")
+	private Set<User> passengers = new HashSet<>();
 
-    public Point getEndPoint() {
-        return endPoint;
-    }
+	@Column(name = "chat_channel_uuid", nullable = true)
+	private String chatChannelUuid;
 
-    public void setEndPoint(Point endPoint) {
-        this.endPoint = endPoint;
-    }
+	@OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
+	@JoinColumn(name = "trip_id", nullable = true)
+	private List<ChatMessage> messages;
 
-    public Time  getDepartureTimeLowerBound() {
-        return departureTimeLowerBound;
-    }
+	public Trip() {
 
-    public void setDepartureTimeLowerBound(Time departureTimeLowerBound) {
-        this.departureTimeLowerBound = departureTimeLowerBound;
-    }
+	}
 
-    public Time getDepartureTimeUpperBound() {
-        return departureTimeUpperBound;
-    }
+	public Trip(User driver, Point startPoint, Point endPoint, Time departureTimeLowerBound,
+			Time departureTimeUpperBound, Date dateOfDeparture, int limitNumberOfPassengers, String comments,
+			Set<Point> intermediatePoints, Set<Tag> tags) {
+		super();
+		this.driver = driver;
+		this.status = TripStatus.ACTIVE;
+		this.startPoint = startPoint;
+		this.endPoint = endPoint;
+		this.departureTimeLowerBound = departureTimeLowerBound;
+		this.departureTimeUpperBound = departureTimeUpperBound;
+		this.dateOfDeparture = dateOfDeparture;
+		this.limitNumberOfPassengers = limitNumberOfPassengers;
+		this.comments = comments;
+		this.intermediatePoints = intermediatePoints;
+		this.tags = tags;
+	}
 
-    public void setDepartureTimeUpperBound(Time departureTimeUpperBound) {
-        this.departureTimeUpperBound = departureTimeUpperBound;
-    }
+	public TripStatus getStatus() {
+		return status;
+	}
 
-    public int getLimitNumberOfPassengers() {
-        return limitNumberOfPassengers;
-    }
+	public void setStatus(TripStatus status) {
+		this.status = status;
+	}
 
-    public void setLimitNumberOfPassengers(int limitNumberOfPassengers) {
-        this.limitNumberOfPassengers = limitNumberOfPassengers;
-    }
+	public Date getDateOfDeparture() {
+		return dateOfDeparture;
+	}
 
-    public int getCurrentNumberOfPassengers() {
-        return currentNumberOfPassengers;
-    }
+	public void setDateOfDeparture(Date dateOfDeparture) {
+		this.dateOfDeparture = dateOfDeparture;
+	}
 
-    public void setCurrentNumberOfPassengers(int currentNumberOfPassengers) {
-        this.currentNumberOfPassengers = currentNumberOfPassengers;
-    }
-    
-    public void incrementPasseger() {
-        this.currentNumberOfPassengers++;
-    }
-    
-    public void decrementPasseger() {
-        this.currentNumberOfPassengers--;
-    }
+	public Long getTripId() {
+		return tripId;
+	}
 
-    public String getComments() {
-        return comments;
-    }
+	public void setTripId(Long tripId) {
+		this.tripId = tripId;
+	}
 
-    public void setComments(String comments) {
-        this.comments = comments;
-    }
+	public User getDriver() {
+		return driver;
+	}
 
-    public Set<Point> getIntermediatePoints() {
-        return intermediatePoints;
-    }
+	public void setDriver(User driver) {
+		this.driver = driver;
+	}
 
-    public void setIntermediatePoints(Set<Point> intermediatePoints) {
-        this.intermediatePoints = intermediatePoints;
-    }
+	public Point getStartPoint() {
+		return startPoint;
+	}
 
-    public Set<Tag> getTags() {
-        return tags;
-    }
+	public void setStartPoint(Point startPoint) {
+		this.startPoint = startPoint;
+	}
 
-    public void setTags(Set<Tag> tags) {
-        this.tags = tags;
-    }
-    
-    public Set<User> getPassengers() {
-        return passengers;
-    }
+	public Point getEndPoint() {
+		return endPoint;
+	}
 
-    public void setPassengers(Set<User> passengers) {
-        this.passengers = passengers;
-    }
+	public void setEndPoint(Point endPoint) {
+		this.endPoint = endPoint;
+	}
 
-    public void addPassenger(User passenger) {
-        this.passengers.add(passenger);
-    }
-    
-    public void removePassenger(User passenger) {
-        this.passengers.remove(passenger);
-    }
+	public Time getDepartureTimeLowerBound() {
+		return departureTimeLowerBound;
+	}
+
+	public void setDepartureTimeLowerBound(Time departureTimeLowerBound) {
+		this.departureTimeLowerBound = departureTimeLowerBound;
+	}
+
+	public Time getDepartureTimeUpperBound() {
+		return departureTimeUpperBound;
+	}
+
+	public void setDepartureTimeUpperBound(Time departureTimeUpperBound) {
+		this.departureTimeUpperBound = departureTimeUpperBound;
+	}
+
+	public int getLimitNumberOfPassengers() {
+		return limitNumberOfPassengers;
+	}
+
+	public void setLimitNumberOfPassengers(int limitNumberOfPassengers) {
+		this.limitNumberOfPassengers = limitNumberOfPassengers;
+	}
+
+	public int getCurrentNumberOfPassengers() {
+		return currentNumberOfPassengers;
+	}
+
+	public void setCurrentNumberOfPassengers(int currentNumberOfPassengers) {
+		this.currentNumberOfPassengers = currentNumberOfPassengers;
+	}
+
+	public void incrementPasseger() {
+		this.currentNumberOfPassengers++;
+	}
+
+	public void decrementPasseger() {
+		this.currentNumberOfPassengers--;
+	}
+
+	public String getComments() {
+		return comments;
+	}
+
+	public void setComments(String comments) {
+		this.comments = comments;
+	}
+
+	public Set<Point> getIntermediatePoints() {
+		return intermediatePoints;
+	}
+
+	public void setIntermediatePoints(Set<Point> intermediatePoints) {
+		this.intermediatePoints = intermediatePoints;
+	}
+
+	public Set<Tag> getTags() {
+		return tags;
+	}
+
+	public void setTags(Set<Tag> tags) {
+		this.tags = tags;
+	}
+
+	public Set<User> getPassengers() {
+		return passengers;
+	}
+
+	public void setPassengers(Set<User> passengers) {
+		this.passengers = passengers;
+	}
+
+	public void addPassenger(User passenger) {
+		this.passengers.add(passenger);
+	}
+
+	public void removePassenger(User passenger) {
+		this.passengers.remove(passenger);
+	}
+
+	public String getChatChannelUuid() {
+		return chatChannelUuid;
+	}
+
+	public void setChatChannelUuid(String chatChannelUuid) {
+		this.chatChannelUuid = chatChannelUuid;
+	}
+
+	public List<ChatMessage> getMessages() {
+		return messages;
+	}
+
+	public void addMessage(ChatMessage message) {
+		this.messages.add(message);
+	}
+
+	public void setMessages(List<ChatMessage> messages) {
+		this.messages = messages;
+	}
+
 }

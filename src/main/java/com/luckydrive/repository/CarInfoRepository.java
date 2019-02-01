@@ -15,7 +15,7 @@ public interface CarInfoRepository extends CrudRepository<CarInfo, Long> {
      * @param passengerId
      * @return
      */
-    @Query(value = "SELECT * FROM car_info c WHERE c.user_id = user_id ",
+    @Query(value = "SELECT * FROM car_info c WHERE c.user_id = :user_id ",
     nativeQuery = true)
     CarInfo findDriversCarInfo(@Param("user_id") Long userId);
 }

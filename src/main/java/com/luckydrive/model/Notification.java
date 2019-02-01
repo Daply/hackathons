@@ -10,6 +10,8 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.OneToOne;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity(name="notification")
 public class Notification {
     @Id
@@ -24,10 +26,12 @@ public class Notification {
 	@Column(name = "is_read")
 	private boolean isRead = false;
 
+	@JsonIgnore
 	@OneToOne
 	@JoinColumn(name="user_id", nullable=false)
     private User user;
 	
+	@JsonIgnore
 	@OneToOne
     @JoinColumn(name="trip_id", nullable=false)
     private Trip trip;
