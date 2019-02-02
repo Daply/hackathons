@@ -37,6 +37,14 @@ public class User {
     
     private String phone;
     
+    @OneToOne
+    @JoinColumn(name="car_info_id", nullable=true)
+    private CarInfo carInfo;
+    
+    @OneToOne
+    @JoinColumn(name="schedule_id", nullable=true)
+    private UserSchedule schedule;
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "user_mode")
     private UserMode userMode;

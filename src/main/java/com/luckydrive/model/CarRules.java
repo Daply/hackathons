@@ -19,6 +19,12 @@ public class CarRules {
     @Column(name = "food_allowed")
     private boolean foodAllowed;
     
+    @Column(name = "talking_allowed")
+    private boolean talkingAllowed;
+    
+    @Column(name = "phone_allowed")
+    private boolean phoneAllowed;
+    
     private String comments;
 
     public CarRules() {

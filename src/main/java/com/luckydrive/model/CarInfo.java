@@ -15,10 +15,6 @@ public class CarInfo {
     @Column(name = "car_info_id")
     private Long carInfoId;
     
-    @OneToOne
-    @JoinColumn(name="user_id", nullable=false)
-    private User user;
-    
     @Column(name = "car_mark", nullable=true)
     private String carMark;
     
@@ -36,9 +32,8 @@ public class CarInfo {
         
     }
 
-	public CarInfo(User user, String carMark, String carNumber, String carColor) {
+	public CarInfo(String carMark, String carNumber, String carColor) {
 		super();
-		this.user = user;
 		this.carMark = carMark;
 		this.carNumber = carNumber;
 		this.carColor = carColor;
@@ -50,14 +45,6 @@ public class CarInfo {
 
 	public void setCarInfoId(Long carInfoId) {
 		this.carInfoId = carInfoId;
-	}
-
-	public User getUser() {
-		return user;
-	}
-
-	public void setUser(User user) {
-		this.user = user;
 	}
 
 	public String getCarMark() {
