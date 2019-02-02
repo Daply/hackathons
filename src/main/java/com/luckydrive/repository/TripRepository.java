@@ -25,7 +25,7 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	@Query(value = "SELECT * FROM (SELECT * FROM trip t " + "INNER JOIN point p on t.start_point_id=p.point_id) tp "
 			+ "WHERE ACOS(SIN(RADIANS(tp.lat))*SIN(RADIANS(:lat))" + "+COS(RADIANS(tp.lat))*COS(RADIANS(:lat))"
 			+ "*COS(ABS(RADIANS(tp.lng)-RADIANS(:lng))))*6371*1000 < :radius", nativeQuery = true)
-	List<Trip> findTripByClosestStartPoints(@Param("lat") double lat, @Param("lng") double lng,
+	Set<Trip> findTripByClosestStartPoints(@Param("lat") double lat, @Param("lng") double lng,
 			@Param("radius") double radius);
 
 	/**
@@ -37,7 +37,7 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	@Query(value = "SELECT * FROM (SELECT * FROM trip t " + "INNER JOIN point p on t.end_point_id=p.point_id) tp "
 			+ "WHERE ACOS(SIN(RADIANS(tp.lat))*SIN(RADIANS(:lat))" + "+COS(RADIANS(tp.lat))*COS(RADIANS(:lat))"
 			+ "*COS(ABS(RADIANS(tp.lng)-RADIANS(:lng))))*6371*1000 < :radius", nativeQuery = true)
-	List<Trip> findTripByClosestEndPoints(@Param("lat") double lat, @Param("lng") double lng,
+	Set<Trip> findTripByClosestEndPoints(@Param("lat") double lat, @Param("lng") double lng,
 			@Param("radius") double radius);
 
 	/**
@@ -46,9 +46,9 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	 * @param driverId
 	 * @return
 	 */
-	@Query(value = "SELECT * FROM trip t WHERE t.driver_id=driver_id AND "
-			+ "t.status = 'ACTIVE' or t.status = 'NOT_ACTIVE'", nativeQuery = true)
-	List<Trip> getDriversTrips(@Param("driver_id") Long driverId);
+	@Query(value = "SELECT * FROM trip t WHERE t.driver_id=:driver_id AND "
+			+ "(t.status = 'ACTIVE' OR t.status = 'NOT_ACTIVE')", nativeQuery = true)
+	Set<Trip> getDriversTrips(@Param("driver_id") Long driverId);
 
 	/**
 	 * Get passenger's active or not active trips
@@ -58,7 +58,7 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	 */
 	@Query(value = "SELECT * FROM trip t WHERE t.trip_id IN " + "(SELECT * FROM user_trip_connect utc WHERE "
 			+ "utc.user_id = :passenger_id) AND t.status='ACTIVE'", nativeQuery = true)
-	List<Trip> getPassengersTrips(@Param("passenger_id") Long passengerId);
+	Set<Trip> getPassengersTrips(@Param("passenger_id") Long passengerId);
 
 	/**
 	 * Get driver's active or not active trips
@@ -66,9 +66,9 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	 * @param driverId
 	 * @return
 	 */
-	@Query(value = "SELECT * FROM trip t WHERE t.driver_id=driver_id AND "
+	@Query(value = "SELECT * FROM trip t WHERE t.driver_id=:driver_id AND "
 			+ "t.status = 'COMPLETED'", nativeQuery = true)
-	List<Trip> getCompletedDriversTrips(@Param("driver_id") Long driverId);
+	Set<Trip> getCompletedDriversTrips(@Param("driver_id") Long driverId);
 
 	/**
 	 * Get passenger's active or not active trips
@@ -78,7 +78,7 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	 */
 	@Query(value = "SELECT * FROM trip t WHERE t.trip_id IN " + "(SELECT * FROM user_trip_connect utc WHERE "
 			+ "utc.user_id = :passenger_id) AND (t.status='COMPLETED' OR t.status='DELETED')", nativeQuery = true)
-	List<Trip> getCompletedPassengersTrips(@Param("passenger_id") Long passengerId);
+	Set<Trip> getCompletedPassengersTrips(@Param("passenger_id") Long passengerId);
 
 	/**
 	 * Get trips by tags
@@ -89,6 +89,6 @@ public interface TripRepository extends CrudRepository<Trip, Long> {
 	@Query(value = "SELECT * FROM trip trp WHERE " + "trp.trip_id IN " + "(SELECT trip_id FROM "
 			+ " (SELECT * FROM tag t " + "  WHERE t.tag_name IN " + "  (:tags)) coincide_tag "
 			+ " INNER JOIN trip_tag_connect ttc " + " ON coincide_tag.tag_id=ttc.tag_id)", nativeQuery = true)
-	List<Trip> findTripByTags(@Param("tags") Set<String> tags);
+	Set<Trip> findTripByTags(@Param("tags") Set<String> tags);
 
 }

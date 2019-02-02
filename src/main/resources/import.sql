@@ -130,12 +130,12 @@ insert into luckydrive.trip_tag_connect(trip_id, tag_id) values (4, 15);
 insert into luckydrive.trip_tag_connect(trip_id, tag_id) values (5, 15);
 
 
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (1, 1);
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (2, 2);
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (3, 5);
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (4, 7);
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (5, 9);
-insert into luckydrive.user_trip_connect(trip_id, user_id) values (4, 12);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (1, 3);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (1, 4);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (2, 6);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (2, 8);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (3, 10);
+insert into luckydrive.user_trip_connect(trip_id, user_id) values (4, 11);
 
 
 

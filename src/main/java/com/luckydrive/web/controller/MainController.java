@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -35,7 +34,9 @@ import com.luckydrive.dto.PrivateChatMessageDTO;
 import com.luckydrive.dto.UserShortInfo;
 import com.luckydrive.model.ChatMessage;
 import com.luckydrive.model.FavouriteRoute;
+import com.luckydrive.model.HomeAddress;
 import com.luckydrive.model.Notification;
+import com.luckydrive.model.Organization;
 import com.luckydrive.model.Point;
 import com.luckydrive.model.RemovingPassengerFromTrip;
 import com.luckydrive.model.PrivateChatMessage;
@@ -44,6 +45,7 @@ import com.luckydrive.model.Trip;
 import com.luckydrive.model.TripStatus;
 import com.luckydrive.model.User;
 import com.luckydrive.model.UserMode;
+import com.luckydrive.model.UserSchedule;
 import com.luckydrive.repository.CarInfoRepository;
 import com.luckydrive.repository.CarRulesRepository;
 import com.luckydrive.repository.ChatMessageRepository;
@@ -89,6 +91,8 @@ public class MainController {
 	ChatMessageRepository chatMessageRepository;
 
 	private RandomString randomStringGenerator = new RandomString(8);
+	
+	private JsonConverter jsonConv = new JsonConverter();
 
 	   @RequestMapping("/")
 	    public String index() {
@@ -115,14 +119,22 @@ public class MainController {
 	@RequestMapping(value = "/home", 
 	        method = RequestMethod.GET,
 	        produces = "application/json")
-	public @ResponseBody User getAuthenticatedUser() {
+	public @ResponseBody String getAuthenticatedUser() {
 	    // This returns a JSON or XML with the users
 	    // just for test
 	    Authentication authentication = authenticationFacade.getAuthentication();
 	    LuckyDriveUserPrincipal userPrinc = (LuckyDriveUserPrincipal) authentication.getPrincipal();
 	    User userParsed = userPrinc.getAppUser();
-	    Optional<User> user = userRepository.findById(userParsed.getUserId());
-	    return user.get();
+	    Optional<User> userOpt = userRepository.findById(userParsed.getUserId());
+	    
+	    User user = userOpt.get();
+	    if (user.getUserMode().equals(UserMode.DRIVER))
+	        user.setTrips(tripRepository.getDriversTrips(user.getUserId()));
+	    
+	    JSONObject json = jsonConv.createJsonUser(user);
+	    
+	    
+	    return json.toString();
 	}
 
 	/**
@@ -366,13 +378,13 @@ public class MainController {
 	    if (user.getUserMode().equals(UserMode.DRIVER)) {
 	        trips = tripRepository.getDriversTrips(user.getUserId());
 	        if (trips == null)
-	            response = createJsonStringFromTripsForDriver(trips);
+	            response = jsonConv.createJsonFromTripsForDriver(trips).toString();
 	    }
 	    else if (user.getUserMode().equals(UserMode.PASSENGER)) {
 	        trips = tripRepository.getPassengersTrips(user.getUserId());
 	        trips = tripRepository.getDriversTrips(user.getUserId());
 	        if (trips == null)
-	            response = createJsonStringFromTripsForPassenger(trips);
+	            response = jsonConv.createJsonFromTripsForPassenger(trips).toString();
 	    }
 		return response;
 	}
@@ -395,12 +407,12 @@ public class MainController {
         if (user.getUserMode().equals(UserMode.DRIVER)) {
             trips = tripRepository.getCompletedDriversTrips(user.getUserId());
             if (trips == null)
-                response = createJsonStringFromTripsForDriver(trips);
+                response = jsonConv.createJsonFromTripsForDriver(trips).toString();
         }
         else if (user.getUserMode().equals(UserMode.PASSENGER)) {
             trips = tripRepository.getCompletedPassengersTrips(user.getUserId());
             if (trips == null)
-                response = createJsonStringFromTripsForPassenger(trips);
+                response = jsonConv.createJsonFromTripsForPassenger(trips).toString();
         }
         return response;
     }
@@ -424,7 +436,7 @@ public class MainController {
 		if (trips == null)
 			return "{\"trips\":[]}";
 		else {
-			return createJsonStringFromTripsForPassenger(trips).toString();
+			return jsonConv.createJsonFromTripsForPassenger(trips).toString();
 		}
 	}
 
@@ -446,7 +458,7 @@ public class MainController {
 		if (trips == null)
 			return "{\"trips\":[]}";
 		else {
-			return createJsonStringFromTripsForPassenger(trips).toString();
+			return jsonConv.createJsonFromTripsForPassenger(trips).toString();
 		}
 	}
 
@@ -466,7 +478,7 @@ public class MainController {
 		if (trips == null)
 			return "{\"trips\":[]}";
 		else {
-			return createJsonStringFromTripsForPassenger(trips).toString();
+			return jsonConv.createJsonFromTripsForPassenger(trips).toString();
 		}
 	}
 
@@ -610,7 +622,7 @@ public class MainController {
 		user.addFavouriteRoutes(route);
 		userRepository.save(user);
 	}
-
+	
 	/**
 	 * Save favourite route (only if user as a passenger) if it is needed to only
 	 * one destination point route is added also in editing user info
@@ -634,130 +646,6 @@ public class MainController {
 	    userRepository.save(user);
 	}
 
-	public String createJsonStringFromTripsForDriver(Iterable<Trip> trips) {
-		// create json object manually
-		JSONObject tripsJson = new JSONObject();
-		JSONArray tripsJsonArray = new JSONArray();
-		JSONObject tripJson = null;
-		for (Trip trip : trips) {
-			tripJson = new JSONObject();
-			JSONObject startPointJson = new JSONObject();
-			startPointJson.put("lat", trip.getStartPoint().getLat());
-			startPointJson.put("lng", trip.getStartPoint().getLng());
-			startPointJson.put("address", trip.getStartPoint().getAddress());
-			startPointJson.put("radius", trip.getStartPoint().getRadius());
-			tripJson.put("startPoint", startPointJson);
-			JSONObject endPointJson = new JSONObject();
-			endPointJson.put("lat", trip.getEndPoint().getLat());
-			endPointJson.put("lng", trip.getEndPoint().getLng());
-			endPointJson.put("address", trip.getEndPoint().getAddress());
-			endPointJson.put("radius", trip.getEndPoint().getRadius());
-			tripJson.put("endPoint", endPointJson);
-			tripJson.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
-			tripJson.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
-			tripJson.put("dateOfDeparture", trip.getDateOfDeparture());
-			tripJson.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
-			tripJson.put("limitNumberOfPassengers", trip.getLimitNumberOfPassengers());
-			JSONArray intermdPointsJsonArray = new JSONArray();
-			JSONObject intermPointJson = null;
-			for (Point intermPoint : trip.getIntermediatePoints()) {
-				intermPointJson = new JSONObject();
-				intermPointJson.put("lat", intermPoint.getLat());
-				intermPointJson.put("lng", intermPoint.getLng());
-				intermPointJson.put("address", intermPoint.getAddress());
-				intermPointJson.put("radius", intermPoint.getRadius());
-				intermdPointsJsonArray.put(intermPointJson);
-			}
-			tripJson.put("intermediatePoints", intermdPointsJsonArray);
-			JSONArray tagJsonArray = new JSONArray();
-			JSONObject tagJson = null;
-			for (Tag tag : trip.getTags()) {
-				tagJson = new JSONObject();
-				tagJson.put("tagName", tag.getTagName());
-				JSONObject tagPointJson = new JSONObject();
-				tagPointJson.put("lat", tag.getTagPoint().getLat());
-				tagPointJson.put("lng", tag.getTagPoint().getLng());
-				tagPointJson.put("address", tag.getTagPoint().getAddress());
-				tagPointJson.put("radius", tag.getTagPoint().getRadius());
-				tagJson.put("tagPoint", tagPointJson);
-				tagJsonArray.put(tagJson);
-			}
-			tripJson.put("tags", tagJsonArray);
-			tripJson.put("comments", trip.getComments());
-			tripsJsonArray.put(tripJson);
-			JSONArray passengerJsonArray = new JSONArray();
-			JSONObject passengerJson = null;
-	        for (User user : trip.getPassengers()) {
-	            passengerJson = new JSONObject();
-	            passengerJson.put("name", user.getName());
-	            passengerJson.put("surname", user.getSurname());
-	            if (user.getPhone() != null && !user.getPhone().isEmpty())
-	                passengerJson.put("phone", user.getPhone());
-	            passengerJsonArray.put(passengerJson);
-	        }
-	        tripJson.put("passengers", passengerJsonArray);
-		}
-		tripsJson.put("trips", tripsJsonArray);
-		return tripsJson.toString();
-	}
-
-	   public String createJsonStringFromTripsForPassenger(Iterable<Trip> trips) {
-	        // create json object manually
-	        JSONObject tripsJson = new JSONObject();
-	        JSONArray tripsJsonArray = new JSONArray();
-	        JSONObject tripJson = null;
-	        for (Trip trip : trips) {
-	            tripJson = new JSONObject();
-	            tripJson.put("driverName", trip.getDriver().getName());
-	            tripJson.put("driverSurname", trip.getDriver().getSurname());
-	            JSONObject startPointJson = new JSONObject();
-	            startPointJson.put("lat", trip.getStartPoint().getLat());
-	            startPointJson.put("lng", trip.getStartPoint().getLng());
-	            startPointJson.put("address", trip.getStartPoint().getAddress());
-	            startPointJson.put("radius", trip.getStartPoint().getRadius());
-	            tripJson.put("startPoint", startPointJson);
-	            JSONObject endPointJson = new JSONObject();
-	            endPointJson.put("lat", trip.getEndPoint().getLat());
-	            endPointJson.put("lng", trip.getEndPoint().getLng());
-	            endPointJson.put("address", trip.getEndPoint().getAddress());
-	            endPointJson.put("radius", trip.getEndPoint().getRadius());
-	            tripJson.put("endPoint", endPointJson);
-	            tripJson.put("departureTimeLowerBound", trip.getDepartureTimeLowerBound());
-	            tripJson.put("departureTimeUpperBound", trip.getDepartureTimeUpperBound());
-	            tripJson.put("dateOfDeparture", trip.getDateOfDeparture());
-	            tripJson.put("currentNumberOfPassengers", trip.getCurrentNumberOfPassengers());
-	            tripJson.put("limitNumberOfPassengers", trip.getLimitNumberOfPassengers());
-	            JSONArray intermdPointsJsonArray = new JSONArray();
-	            JSONObject intermPointJson = null;
-	            for (Point intermPoint : trip.getIntermediatePoints()) {
-	                intermPointJson = new JSONObject();
-	                intermPointJson.put("lat", intermPoint.getLat());
-	                intermPointJson.put("lng", intermPoint.getLng());
-	                intermPointJson.put("address", intermPoint.getAddress());
-	                intermPointJson.put("radius", intermPoint.getRadius());
-	                intermdPointsJsonArray.put(intermPointJson);
-	            }
-	            tripJson.put("intermediatePoints", intermdPointsJsonArray);
-	            JSONArray tagJsonArray = new JSONArray();
-	            JSONObject tagJson = null;
-	            for (Tag tag : trip.getTags()) {
-	                tagJson = new JSONObject();
-	                tagJson.put("tagName", tag.getTagName());
-	                JSONObject tagPointJson = new JSONObject();
-	                tagPointJson.put("lat", tag.getTagPoint().getLat());
-	                tagPointJson.put("lng", tag.getTagPoint().getLng());
-	                tagPointJson.put("address", tag.getTagPoint().getAddress());
-	                tagPointJson.put("radius", tag.getTagPoint().getRadius());
-	                tagJson.put("tagPoint", tagPointJson);
-	                tagJsonArray.put(tagJson);
-	            }
-	            tripJson.put("tags", tagJsonArray);
-	            tripJson.put("comments", trip.getComments());
-	            tripsJsonArray.put(tripJson);
-	        }
-	        tripsJson.put("trips", tripsJsonArray);
-	        return tripsJson.toString();
-	    }
 
 	@MessageMapping("/chat.addUser")
 	@SendTo("/topic/public")

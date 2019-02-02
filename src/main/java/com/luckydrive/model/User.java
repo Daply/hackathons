@@ -17,6 +17,8 @@ import javax.persistence.ManyToMany;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
 
+import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity(name = "user")
@@ -35,15 +37,15 @@ public class User {
     @JsonIgnore
     private String password;
     
-    private String phone;
+    private String phone = "";
     
     @OneToOne
     @JoinColumn(name="car_info_id", nullable=true)
-    private CarInfo carInfo;
+    private CarInfo carInfo = new CarInfo();
     
     @OneToOne
     @JoinColumn(name="schedule_id", nullable=true)
-    private UserSchedule schedule;
+    private UserSchedule schedule = new UserSchedule();
     
     @Enumerated(EnumType.STRING)
     @Column(name = "user_mode")
@@ -51,8 +53,9 @@ public class User {
     
     @OneToOne
     @JoinColumn(name="organization_id", nullable=false)
-    private Organization organization;
+    private Organization organization = new Organization();
     
+    @JsonIgnore
     @ManyToMany(cascade = { CascadeType.ALL })
     @JoinTable(
         name = "user_trip_connect", 
@@ -179,4 +182,22 @@ public class User {
     public void setHomeAddresses(Set<HomeAddress> homeAddresses) {
         this.homeAddresses = homeAddresses;
     }
+
+    public CarInfo getCarInfo() {
+        return carInfo;
+    }
+
+    public void setCarInfo(CarInfo carInfo) {
+        this.carInfo = carInfo;
+    }
+
+    public UserSchedule getSchedule() {
+        return schedule;
+    }
+
+    public void setSchedule(UserSchedule schedule) {
+        this.schedule = schedule;
+    }
+    
+    
 }

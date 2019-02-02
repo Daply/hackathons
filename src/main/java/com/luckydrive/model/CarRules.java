@@ -69,6 +69,22 @@ public class CarRules {
     public void setComments(String comments) {
         this.comments = comments;
     }
+
+    public boolean isTalkingAllowed() {
+        return talkingAllowed;
+    }
+
+    public void setTalkingAllowed(boolean talkingAllowed) {
+        this.talkingAllowed = talkingAllowed;
+    }
+
+    public boolean isPhoneAllowed() {
+        return phoneAllowed;
+    }
+
+    public void setPhoneAllowed(boolean phoneAllowed) {
+        this.phoneAllowed = phoneAllowed;
+    }
     
     
 }
