@@ -22,7 +22,7 @@ import static org.hibernate.cfg.Environment.*;
 //        @ComponentScan("com.luckydrive.zdbinfo.repository")
 //})
 public class IbaDbConfig {
-    
+//    
 //    @Autowired
 //    private Environment env;
 //
