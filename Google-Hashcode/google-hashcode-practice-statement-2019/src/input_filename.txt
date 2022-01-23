@@ -1,0 +1,2 @@
+Input filename here (example, small, medium or big):
+example
